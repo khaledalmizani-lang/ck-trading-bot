@@ -4,6 +4,16 @@ import subprocess
 import threading
 import time
 from datetime import datetime, timezone, timedelta
+from flask import Flask # إضافة Flask
+
+# --- Flask Keep-Alive (لمنع توقف السيرفر) ---
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Bot is running!"
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+threading.Thread(target=run_flask, daemon=True).start()
 
 import config
 import coingecko
@@ -44,7 +54,6 @@ _consecutive_losses:  int   = 0
 _autopause_until:     float = 0.0
 _loss_streak_notified: bool = False
 
-
 def _check_and_reset_day():
     global _day_marker, _daily_trades, _daily_pnl, _daily_loss_notified, _daily_trades_notified
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -54,7 +63,6 @@ def _check_and_reset_day():
         _daily_pnl = 0.0
         _daily_loss_notified = False
         _daily_trades_notified = False
-
 
 def monitor_open_trades(prices: dict):
     global cooldown_until, _daily_pnl, _consecutive_losses, _autopause_until, _loss_streak_notified
@@ -110,7 +118,6 @@ def monitor_open_trades(prices: dict):
     open_trades.clear()
     open_trades.extend(still_open)
 
-
 def main():
     global _daily_trades, _daily_trades_notified, _daily_loss_notified, \
            _consecutive_errors, _volume_spike_cooldown, \
@@ -123,6 +130,7 @@ def main():
     sym_list = ", ".join(config.SYMBOLS)
     print(f"[EXECUTION MODE{mode_tag}] Monitoring {len(config.SYMBOLS)} symbols: {sym_list} | RSI ≤{rsi_buy}/≥{rsi_sell} | EMA 200 | SL {config.STOP_LOSS_PCT}% / TP {config.TAKE_PROFIT_PCT}% | {interval}s interval")
 
+    # --- LOADING TRADES & MOCK TRADES ---
     _pending = get_pending_trades()
     if _pending:
         open_trades.extend(_pending)
@@ -132,6 +140,13 @@ def main():
             print(f"[STARTUP] Restored #{_t['entry_id']:>3} {_t['symbol']} {_t['signal']}  timeout in {_remaining/60:.1f}min  SL={_t['stop_loss']}  TP={_t['take_profit']}")
         print(f"[STARTUP] Total restored: {len(_pending)} open trade(s)")
 
+    # إضافة 3 صفقات تجريبية للاختبار
+    open_trades.append({"entry_id": 999, "symbol": "BTC/USDT", "signal": "BUY", "entry_price": 50000.0, "stop_loss": 49000.0, "take_profit": 52000.0, "due_at": time.time() + 3600})
+    open_trades.append({"entry_id": 998, "symbol": "ETH/USDT", "signal": "SELL", "entry_price": 3000.0, "stop_loss": 3100.0, "take_profit": 2900.0, "due_at": time.time() + 3600})
+    open_trades.append({"entry_id": 997, "symbol": "SOL/USDT", "signal": "BUY", "entry_price": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "due_at": time.time() + 3600})
+    print(f"[STARTUP] Mock trades added. Total open: {len(open_trades)}")
+
+    # (بقية كود الـ main كما هو في ملفك الأصلي)
     def _hourly_report_loop():
         try:
             _sc_seed = coingecko.fetch_stablecoin_volumes()
@@ -444,9 +459,6 @@ def main():
             print(f"[{ts}] [ERROR] {e}")
 
         time.sleep(get_check_interval())
-
-
-
 
 if __name__ == "__main__":
     main()
