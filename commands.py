@@ -5,6 +5,7 @@ import threading
 from datetime import datetime, timezone, timedelta
 from telegram import Bot
 import config
+import subscribers
 
 _TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
 _CHAT_ID = os.getenv("TELEGRAM_CHAT_ID",   "")
@@ -273,11 +274,100 @@ def _cmd_help():
         "/rsi      -- Top 20 coins by RSI\n"
         "/help     -- This message\n"
         "---\n"
+        "/join     -- Request full access\n"
+        "---\n"
         "Admin only:\n"
         "/addadmin [id] -- Add admin\n"
         "/removeadmin [id] -- Remove admin\n"
         "/admins -- List all admins"
     )
+
+
+def _cmd_join(chat_id: str, name: str, username: str):
+    import os
+    from notifier import send
+    owner_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    u = subscribers.get_user(chat_id)
+    if u and u.get("status") == "member":
+        return "✅ You already have full access!"
+    if u and u.get("status") == "banned":
+        return "❌ Your request was rejected."
+    uname_str = f"@{username}" if username else "no username"
+    # Notify owner
+    msg = (f"📨 <b>Join Request</b>\n\n"
+           f"👤 Name: {name}\n"
+           f"🔗 Username: {uname_str}\n"
+           f"🆔 ID: {chat_id}\n\n"
+           f"To approve: /approve {chat_id}\n"
+           f"To reject:  /reject {chat_id}")
+    send(msg)
+    return ("📨 <b>Request sent!</b>\n\n"
+            "The admin will review your request.\n"
+            "You will be notified once approved.")
+
+def _cmd_approve(args, sender_id):
+    import os
+    from notifier import send as _send
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner) and not config.is_admin(str(sender_id)):
+        return "❌ Admins only."
+    if not args:
+        return "⚠️ Usage: /approve [user_id]"
+    uid = str(args[0])
+    if subscribers.approve_member(uid):
+        try:
+            asyncio.run(_reply(int(uid), "✅ <b>Access Approved!</b>\nWelcome! You now have full access."))
+        except Exception:
+            pass
+        return f"✅ Approved: {uid}"
+    return f"❌ User {uid} not found."
+
+def _cmd_reject(args, sender_id):
+    import os
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner) and not config.is_admin(str(sender_id)):
+        return "❌ Admins only."
+    if not args:
+        return "⚠️ Usage: /reject [user_id]"
+    uid = str(args[0])
+    if subscribers.reject_member(uid):
+        try:
+            asyncio.run(_reply(int(uid), "❌ <b>Request Rejected</b>\nContact the admin for more info."))
+        except Exception:
+            pass
+        return f"✅ Rejected: {uid}"
+    return f"❌ User {uid} not found."
+
+def _cmd_kick(args, sender_id):
+    import os
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner) and not config.is_admin(str(sender_id)):
+        return "❌ Admins only."
+    if not args:
+        return "⚠️ Usage: /kick [user_id]"
+    uid = str(args[0])
+    subscribers.remove_member(uid)
+    return f"✅ Removed: {uid}"
+
+def _cmd_members(sender_id):
+    import os
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner) and not config.is_admin(str(sender_id)):
+        return "❌ Admins only."
+    stats = subscribers.total_users()
+    members = subscribers.list_members()
+    pending = subscribers.list_pending()
+    lines = ["👥 <b>Users Overview</b>", "---",
+             f"✅ Members:  {stats['members']}",
+             f"👀 Trial:    {stats['trial']}",
+             f"❌ Banned:   {stats['banned']}",
+             f"📊 Total:    {stats['total']}"]
+    if pending:
+        lines.append("\n⏳ <b>Pending Requests:</b>")
+        for cid, u in pending[:5]:
+            uname = f"@{u['username']}" if u.get('username') else u.get('name','?')
+            lines.append(f"  • {uname}  ID:{cid}  /approve {cid}")
+    return "\n".join(lines)
 
 
 def _cmd_addadmin(args, sender_id):
@@ -336,6 +426,11 @@ _DISPATCH = {
     "/addadmin":    lambda args: None,
     "/removeadmin": lambda args: None,
     "/admins":      lambda args: None,
+    "/join":        lambda args: None,
+    "/approve":     lambda args: None,
+    "/reject":      lambda args: None,
+    "/kick":        lambda args: None,
+    "/members":     lambda args: None,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -373,13 +468,90 @@ def _poll_loop():
                 msg = upd.message or upd.edited_message
                 if not msg or not msg.text:
                     continue
-                if not config.is_admin(str(msg.chat_id)):
+                cid  = str(msg.chat_id)
+                name = msg.from_user.first_name if msg.from_user else ""
+                uname = msg.from_user.username  if msg.from_user else ""
+
+                # Register new user automatically
+                subscribers.register_user(cid, name, uname)
+
+                # /join is always allowed
+                if word == "/join":
+                    reply_text = _cmd_join(cid, name, uname)
+                    try:
+                        asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception:
+                        pass
+                    continue
+
+                # Owner / admin = full access
+                if config.is_admin(cid):
+                    pass  # allow all
+                # Member = allow non-admin commands
+                elif subscribers.is_member(cid):
+                    if word in ("/addadmin", "/removeadmin", "/admins", "/approve", "/reject", "/members", "/kick"):
+                        try:
+                            asyncio.run(_reply(msg.chat_id, "❌ This command is for admins only."))
+                        except Exception:
+                            pass
+                        continue
+                # Trial user
+                elif subscribers.can_use(cid):
+                    if word in ("/addadmin", "/removeadmin", "/admins", "/approve", "/reject", "/members", "/kick"):
+                        try:
+                            asyncio.run(_reply(msg.chat_id, "❌ This command is for admins only."))
+                        except Exception:
+                            pass
+                        continue
+                    # Count usage
+                    subscribers.increment_signals(cid)
+                    rem = subscribers.trial_remaining(cid)
+                    if rem == 0:
+                        try:
+                            asyncio.run(_reply(msg.chat_id,
+                                "⏳ <b>Trial ended</b>\n\n"
+                                "You have used all 5 free signals.\n"
+                                "Type /join to request full access."))
+                        except Exception:
+                            pass
+                        continue
+                # Blocked / trial expired
+                else:
+                    if not subscribers.is_banned(cid):
+                        try:
+                            asyncio.run(_reply(msg.chat_id,
+                                "🔒 <b>Access Required</b>\n\n"
+                                "Type /join to request full access."))
+                        except Exception:
+                            pass
                     continue
                 parts = msg.text.strip().split()
                 word = parts[0].lower()
                 args = parts[1:]
                 if "@" in word:
                     word = word.split("@")[0]
+                # Member management commands
+                if word == "/approve":
+                    reply_text = _cmd_approve(args, msg.chat_id)
+                    try: asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception: pass
+                    continue
+                elif word == "/reject":
+                    reply_text = _cmd_reject(args, msg.chat_id)
+                    try: asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception: pass
+                    continue
+                elif word == "/kick":
+                    reply_text = _cmd_kick(args, msg.chat_id)
+                    try: asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception: pass
+                    continue
+                elif word == "/members":
+                    reply_text = _cmd_members(msg.chat_id)
+                    try: asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception: pass
+                    continue
+
                 # Admin commands need sender_id
                 if word == "/addadmin":
                     reply_text = _cmd_addadmin(args, msg.chat_id)
