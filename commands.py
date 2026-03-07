@@ -32,7 +32,7 @@ return f"${price:.8f}"
 # ─────────────────────────────────────────────────────────────────────────────
 def _cmd_status():
 if not _last_market:
-return " age = int(time.time() - _last_scan_ts)
+return "⏳ First scan in progress -- please try again in ~20 seconds."
 <b>First scan in progress</b> -- please try again in ~20 seconds."
 stamp = f"{age}s ago" if age < 120 else f"{age // 60}m ago"
 lines = [f" <b>Market Snapshot</b> <i>({stamp})</i>", "---"]
