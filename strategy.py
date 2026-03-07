@@ -4,47 +4,93 @@ from analyzer import get_rsi_thresholds
 _MTF_ORDER   = ("15m", "1h", "4h", "1d")
 _MTF_DISPLAY = {"15m": "15m", "1h": "1H", "4h": "4H", "1d": "1D"}
 
+# ── Volume & ATR settings ─────────────────────────────────────────────────────
+VOLUME_SPIKE_MIN  = 120   # volume must be >= 120% of 20-candle average
+ATR_SL_MULTIPLIER = 1.5   # stop loss = ATR * multiplier
+ATR_TP_MULTIPLIER = 3.0   # take profit = ATR * multiplier
+
 
 def check_signal(price: float, rsi: float | None, ema200: float | None,
                  macd_hist: float | None = None,
                  stoch_k: float | None = None,
-                 stoch_d: float | None = None) -> str:
+                 stoch_d: float | None = None,
+                 volume_pct: float | None = None) -> str:
     """
     Signal logic:
-      BUY:  RSI ≤ threshold  +  price > EMA200  +  MACD hist rising (optional)  +  StochRSI < 20 (optional)
-      SELL: RSI ≥ threshold  +  MACD hist falling (optional)  +  StochRSI > 80 (optional)
+      BUY:  RSI <= threshold  +  price > EMA200  +  Volume Spike confirmed
+      SELL: RSI >= threshold  +  Volume Spike confirmed
 
-    Extra indicators act as confirmations (score-based), not hard blockers,
-    so the bot still signals even if MACD/Stoch data is unavailable.
+    Volume Spike acts as a filter — low volume signals are ignored.
     """
     rsi_buy_max, rsi_sell_min = get_rsi_thresholds()
 
     if rsi is None:
         return "HOLD"
 
+    # ── Volume Spike filter ───────────────────────────────────────────────────
+    volume_ok = (volume_pct is None) or (volume_pct >= VOLUME_SPIKE_MIN)
+
     # ── BUY ──────────────────────────────────────────────────────────────────
     if rsi <= rsi_buy_max:
         if ema200 is not None and price <= ema200:
             return "TREND_BLOCK_BUY"
+        if not volume_ok:
+            return "LOW_VOLUME"
         return "BUY"
 
     # ── SELL ─────────────────────────────────────────────────────────────────
     if rsi >= rsi_sell_min:
+        if not volume_ok:
+            return "LOW_VOLUME"
         return "SELL"
 
     return "HOLD"
 
 
+def calculate_atr_levels(price: float, atr: float | None) -> dict:
+    """
+    Returns dynamic SL and TP based on ATR.
+    Falls back to config fixed percentages if ATR is unavailable.
+    """
+    if atr is None or atr <= 0:
+        sl_pct = config.STOP_LOSS_PCT
+        tp_pct = config.TAKE_PROFIT_PCT
+        sl = round(price * (1 - sl_pct / 100), 6)
+        tp = round(price * (1 + tp_pct / 100), 6)
+        return {
+            "sl": sl,
+            "tp": tp,
+            "sl_pct": sl_pct,
+            "tp_pct": tp_pct,
+            "atr_based": False,
+        }
+
+    sl_distance = atr * ATR_SL_MULTIPLIER
+    tp_distance = atr * ATR_TP_MULTIPLIER
+    sl = round(price - sl_distance, 6)
+    tp = round(price + tp_distance, 6)
+    sl_pct = round((sl_distance / price) * 100, 2)
+    tp_pct = round((tp_distance / price) * 100, 2)
+    return {
+        "sl": sl,
+        "tp": tp,
+        "sl_pct": sl_pct,
+        "tp_pct": tp_pct,
+        "atr_based": True,
+    }
+
+
 def signal_strength(price: float, rsi: float | None, ema200: float | None,
                     macd_hist: float | None, stoch_k: float | None,
-                    stoch_d: float | None, direction: str) -> int:
+                    stoch_d: float | None, direction: str,
+                    volume_pct: float | None = None) -> int:
     """
-    Returns a confirmation score 0-3 for extra indicators.
-    Used in trade notifications to show signal quality.
+    Returns a confirmation score 0-4 for extra indicators.
       0 = RSI only
       1 = RSI + 1 confirmation
       2 = RSI + 2 confirmations
-      3 = RSI + all confirmations
+      3 = RSI + 3 confirmations
+      4 = RSI + all confirmations (including volume)
     """
     score = 0
     if direction == "BUY":
@@ -54,6 +100,8 @@ def signal_strength(price: float, rsi: float | None, ema200: float | None,
             score += 1
         if ema200 is not None and price > ema200:
             score += 1
+        if volume_pct is not None and volume_pct >= VOLUME_SPIKE_MIN:
+            score += 1
     elif direction == "SELL":
         if macd_hist is not None and macd_hist < 0:
             score += 1
@@ -61,10 +109,13 @@ def signal_strength(price: float, rsi: float | None, ema200: float | None,
             score += 1
         if ema200 is not None and price < ema200:
             score += 1
+        if volume_pct is not None and volume_pct >= VOLUME_SPIKE_MIN:
+            score += 1
     return score
 
 
 def signal_strength_label(score: int) -> str:
+    if score >= 4: return "🔥 Strong"
     if score >= 3: return "🔥 Strong"
     if score >= 2: return "💪 Moderate"
     if score >= 1: return "⚡ Weak"
