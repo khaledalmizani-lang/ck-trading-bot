@@ -9,6 +9,7 @@ import config
 import coingecko
 from fetcher import fetch_market_data, fetch_mtf_indicators
 from strategy import check_signal, evaluate_mtf, tf_labels_to_str, calculate_atr_levels
+import balance as bal
 from journal import log_signal, close_trade, get_pending_trades, load_history
 from analyzer import (
     analyze_performance, get_rsi_thresholds, get_check_interval,
@@ -101,6 +102,7 @@ def monitor_open_trades(prices: dict):
                   f"  →  {exit_reason} @ {current_price}  ({pnl_pct:+.2f}%)  {outcome}")
 
             _daily_pnl += pnl_pct
+            bal.close_trade(trade.get("entry_id", ""), pnl_pct)
             cooldown_until = time.time() + config.COOLDOWN_MINUTES * 60
             record_exit(exit_reason)
 
@@ -592,11 +594,14 @@ def main():
                         print(f"[{ts}] [{best_signal} SIGNAL] {best_sym} = {price}"
                               f"  RSI: {rsi_str}  SL: {sl}  TP: {tp}  TF: {tf_str}")
 
+                        pos_size = bal.calculate_position_size()
+                        bal.allocate_trade(trade_info["id"], pos_size)
                         open_trades.append({
                             "entry_id": trade_info["id"], "symbol": best_sym,
                             "signal": best_signal, "entry_price": price,
                             "stop_loss": sl, "take_profit": tp,
                             "due_at": time.time() + config.EVAL_DELAY,
+                            "position_size": pos_size,
                         })
                         _daily_trades += 1
                         _last_trade_ts = time.time()
