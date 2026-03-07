@@ -44,4 +44,46 @@ MIN_SIGNALS_FOR_ADJUSTMENT = 3
 STATE_FILE   = "config.json"
 HISTORY_FILE = "trade_history.json"
 
-MAX_OPEN_TRADES = 3
+# ── Admin system ──────────────────────────────────────────────────────────────
+import json as _json, os as _os
+_ADMINS_FILE = "admins.json"
+
+def _load_admins():
+    owner = _os.getenv("TELEGRAM_CHAT_ID", "")
+    if not _os.path.exists(_ADMINS_FILE):
+        return {owner} if owner else set()
+    try:
+        data = _json.loads(open(_ADMINS_FILE).read())
+        admins = set(str(x) for x in data)
+        if owner: admins.add(str(owner))
+        return admins
+    except Exception:
+        return {owner} if owner else set()
+
+def _save_admins(admins_set):
+    owner = _os.getenv("TELEGRAM_CHAT_ID", "")
+    to_save = [x for x in admins_set if x != str(owner)]
+    open(_ADMINS_FILE, "w").write(_json.dumps(to_save))
+
+def is_admin(chat_id: str) -> bool:
+    return str(chat_id) in _load_admins()
+
+def add_admin(chat_id: str) -> bool:
+    admins = _load_admins()
+    admins.add(str(chat_id))
+    _save_admins(admins)
+    return True
+
+def remove_admin(chat_id: str) -> bool:
+    owner = _os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(chat_id) == str(owner):
+        return False  # can't remove owner
+    admins = _load_admins()
+    admins.discard(str(chat_id))
+    _save_admins(admins)
+    return True
+
+def list_admins() -> list:
+    return list(_load_admins())
+
+MAX_OPEN_TRADES = 5
