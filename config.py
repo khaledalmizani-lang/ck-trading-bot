@@ -1,0 +1,47 @@
+import os
+
+# ── Binance API (optional — only needed for private/trading endpoints) ─────────
+API_KEY    = os.getenv("BINANCE_API_KEY", "")
+API_SECRET = os.getenv("BINANCE_API_SECRET", "")
+
+EXCHANGE = "binance"
+SYMBOL   = "BTC/USDT"
+
+SYMBOLS = [
+    "BTC/USDT",   "ETH/USDT",   "DOGE/USDT",  "ADA/USDT",   "SOL/USDT",
+    "LINK/USDT",  "HBAR/USDT",  "XRP/USDT",   "AVAX/USDT",  "DOT/USDT",
+    "POL/USDT",   "SUI/USDT",   "SEI/USDT",   "ATOM/USDT",  "CHR/USDT",
+    "CHZ/USDT",   "FET/USDT",   "QTUM/USDT",  "AXS/USDT",   "SAND/USDT",
+    "NEAR/USDT",  "APT/USDT",   "ARB/USDT",   "OP/USDT",    "IMX/USDT",
+    "TAO/USDT",   "RENDER/USDT","WLD/USDT",   "AGIX/USDT",  "STRK/USDT",
+    "AAVE/USDT",  "UNI/USDT",   "JUP/USDT",
+]
+
+RSI_BUY_MAX  = 38
+RSI_SELL_MIN = 62
+
+STOP_LOSS_PCT   = 1.5
+TAKE_PROFIT_PCT = 3.0
+
+MTF_NORMAL_CONFIRM     = 2
+MTF_CAUTIOUS_CONFIRM   = 3
+CONSECUTIVE_LOSS_CAUTION = 2
+CONSECUTIVE_LOSS_PAUSE   = 4
+AUTO_PAUSE_DURATION      = 7200
+
+CHECK_INTERVAL           = 20
+DEFENSIVE_CHECK_INTERVAL = 60
+
+CONSECUTIVE_SL_LIMIT = 3
+
+EVAL_DELAY       = 3600
+COOLDOWN_MINUTES = 30
+
+DAILY_MAX_TRADES = 5
+DAILY_LOSS_LIMIT = -5.0
+
+MIN_SIGNALS_FOR_ADJUSTMENT = 3
+STATE_FILE   = "config.json"
+HISTORY_FILE = "trade_history.json"
+
+MAX_OPEN_TRADES = 3
