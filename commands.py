@@ -256,10 +256,6 @@ def _cmd_adx():
     return "\n".join(lines)
 
 
-def _cmd_restart():
-    import sys
-    send_reply = _reply  # captured below in dispatch
-    return "🔄 <b>Restarting bot...</b>\nWill be back online in ~10 seconds."
 
 
 def _cmd_help():
@@ -275,9 +271,54 @@ def _cmd_help():
         "/settings -- Bot configuration\n"
         "/adx      -- Strong trend coins\n"
         "/rsi      -- Top 20 coins by RSI\n"
-        "/restart  -- Restart the bot\n"
-        "/help     -- This message\n---"
+        "/help     -- This message\n"
+        "---\n"
+        "Admin only:\n"
+        "/addadmin [id] -- Add admin\n"
+        "/removeadmin [id] -- Remove admin\n"
+        "/admins -- List all admins"
     )
+
+
+def _cmd_addadmin(args, sender_id):
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner):
+        return "❌ Only the owner can add admins."
+    if not args:
+        return "Usage: /addadmin [telegram_id]  Example: /addadmin 123456789"
+    try:
+        new_id = str(int(args[0]))
+    except ValueError:
+        return "⚠️ Invalid ID. Must be a number."
+    config.add_admin(new_id)
+    return f"✅ Admin added: {new_id}"
+
+def _cmd_removeadmin(args, sender_id):
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner):
+        return "❌ Only the owner can remove admins."
+    if not args:
+        return "⚠️ Usage: /removeadmin [telegram_id]"
+    try:
+        rem_id = str(int(args[0]))
+    except ValueError:
+        return "⚠️ Invalid ID."
+    if not config.remove_admin(rem_id):
+        return "❌ Cannot remove the owner."
+    return f"✅ Admin removed: {rem_id}"
+
+def _cmd_admins(sender_id):
+    owner = os.getenv("TELEGRAM_CHAT_ID", "")
+    if str(sender_id) != str(owner):
+        return "❌ Only the owner can view admins."
+    admins = config.list_admins()
+    if not admins:
+        return "No admins yet."
+    lines = ["👥 <b>Admins List</b>", "---"]
+    for a in admins:
+        tag = "  👑 Owner" if str(a) == str(owner) else ""
+        lines.append(f"• {a}{tag}")
+    return "\n".join(lines)
 
 
 _DISPATCH = {
@@ -292,7 +333,9 @@ _DISPATCH = {
     "/adx":     (lambda args: _cmd_adx()),
     "/rsi":     (lambda args: _cmd_rsi()),
     "/help":    (lambda args: _cmd_help()),
-    "/restart": (lambda args: _cmd_restart()),
+    "/addadmin":    lambda args: None,
+    "/removeadmin": lambda args: None,
+    "/admins":      lambda args: None,
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -330,7 +373,7 @@ def _poll_loop():
                 msg = upd.message or upd.edited_message
                 if not msg or not msg.text:
                     continue
-                if str(msg.chat_id) != str(_CHAT_ID):
+                if not config.is_admin(str(msg.chat_id)):
                     continue
                 parts = msg.text.strip().split()
                 word = parts[0].lower()
@@ -347,6 +390,29 @@ def _poll_loop():
                     import sys, time
                     time.sleep(1)
                     os.execv(sys.executable, [sys.executable] + sys.argv)
+
+                # Admin commands need sender_id
+                if word == "/addadmin":
+                    reply_text = _cmd_addadmin(args, msg.chat_id)
+                    try:
+                        asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception:
+                        pass
+                    continue
+                elif word == "/removeadmin":
+                    reply_text = _cmd_removeadmin(args, msg.chat_id)
+                    try:
+                        asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception:
+                        pass
+                    continue
+                elif word == "/admins":
+                    reply_text = _cmd_admins(msg.chat_id)
+                    try:
+                        asyncio.run(_reply(msg.chat_id, reply_text))
+                    except Exception:
+                        pass
+                    continue
 
                 handler = _DISPATCH.get(word)
                 if handler:
