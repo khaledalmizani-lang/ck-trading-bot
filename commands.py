@@ -151,7 +151,7 @@ def _cmd_pnl():
     today = date.today().isoformat()
     history = load_history()
     today_trades = [e for e in history
-                    if e.get("outcome_timestamp", "").startswith(today)
+                    if str(e.get("outcome_timestamp") or "").startswith(today)
                     and e["outcome"] in ("SUCCESS", "FAILURE")
                     and e.get("outcome_price") is not None]
     if not today_trades:
