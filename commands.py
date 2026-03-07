@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from telegram import Bot
 import config
 import subscribers
+import balance as bal
 
 _TOKEN   = os.getenv("TELEGRAM_BOT_TOKEN", "")
 _CHAT_ID = os.getenv("TELEGRAM_CHAT_ID",   "")
@@ -274,6 +275,7 @@ def _cmd_help():
         "/rsi      -- Top 20 coins by RSI\n"
         "/help     -- This message\n"
         "---\n"
+        "/balance  -- Account balance and position size\n"
         "/join     -- Request full access\n"
         "---\n"
         "Admin only:\n"
@@ -370,6 +372,39 @@ def _cmd_members(sender_id):
     return "\n".join(lines)
 
 
+def _cmd_balance():
+    s = bal.get_summary()
+    pnl_emoji = "🟢" if s["pnl_usd"] >= 0 else "🔴"
+    pnl_sign  = "+" if s["pnl_usd"] >= 0 else ""
+    pos_size  = bal.calculate_position_size()
+    lines = [
+        "💰 <b>Account Balance</b>",
+        "―――――――――――――――――――――",
+        f"💵 Starting:   ${s['starting']:.2f}",
+        f"📊 Current:    ${s['current']:.2f}",
+        f"{pnl_emoji} PnL:        {pnl_sign}${s['pnl_usd']:.2f} ({pnl_sign}{s['pnl_pct']:.1f}%)",
+        "―――――――――――――――――――――",
+        f"🔒 In trades:  ${s['allocated']:.2f} ({s['open_trades']} open)",
+        f"✅ Free:       ${s['free']:.2f}",
+        f"📐 Next trade: ${pos_size:.2f}",
+        "―――――――――――――――――――――",
+        f"📈 Total trades: {s['total_trades']}",
+    ]
+    return "\n".join(lines)
+
+def _cmd_setbalance(args):
+    if not args:
+        return "⚠️ Usage: /setbalance 100"
+    try:
+        amount = float(args[0])
+        if amount <= 0:
+            return "⚠️ Amount must be positive."
+        bal.set_starting_balance(amount)
+        return f"✅ Balance set to ${amount:.2f}"
+    except ValueError:
+        return "⚠️ Invalid amount."
+
+
 def _cmd_addadmin(args, sender_id):
     owner = os.getenv("TELEGRAM_CHAT_ID", "")
     if str(sender_id) != str(owner):
@@ -422,7 +457,9 @@ _DISPATCH = {
     "/settings":(lambda args: _cmd_settings()),
     "/adx":     (lambda args: _cmd_adx()),
     "/rsi":     (lambda args: _cmd_rsi()),
-    "/help":    (lambda args: _cmd_help()),
+    "/help":     (lambda args: _cmd_help()),
+    "/balance":  (lambda args: _cmd_balance()),
+    "/setbalance": (lambda args: _cmd_setbalance(args)),
     "/addadmin":    lambda args: None,
     "/removeadmin": lambda args: None,
     "/admins":      lambda args: None,
