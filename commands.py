@@ -475,6 +475,10 @@ def _poll_loop():
                 # Register new user automatically
                 subscribers.register_user(cid, name, uname)
 
+                parts = msg.text.strip().split()
+                word  = parts[0].lower().split("@")[0]
+                args  = parts[1:]
+
                 # /join is always allowed
                 if word == "/join":
                     reply_text = _cmd_join(cid, name, uname)
@@ -503,10 +507,8 @@ def _poll_loop():
                         except Exception:
                             pass
                         continue
-                    # Count usage
-                    subscribers.increment_signals(cid)
                     rem = subscribers.trial_remaining(cid)
-                    if rem == 0:
+                    if rem <= 0:
                         try:
                             asyncio.run(_reply(msg.chat_id,
                                 "⏳ <b>Trial ended</b>\n\n"
@@ -515,6 +517,7 @@ def _poll_loop():
                         except Exception:
                             pass
                         continue
+                    subscribers.increment_signals(cid)
                 # Blocked / trial expired
                 else:
                     if not subscribers.is_banned(cid):
@@ -525,9 +528,6 @@ def _poll_loop():
                         except Exception:
                             pass
                     continue
-                parts = msg.text.strip().split()
-                word = parts[0].lower()
-                args = parts[1:]
                 if "@" in word:
                     word = word.split("@")[0]
                 # Member management commands
