@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 import config
 import coingecko
 from fetcher import fetch_market_data, fetch_mtf_indicators
-from strategy import check_signal, evaluate_mtf, tf_labels_to_str
+from strategy import check_signal, evaluate_mtf, tf_labels_to_str, calculate_atr_levels
 from journal import log_signal, close_trade, get_pending_trades, load_history
 from analyzer import (
     analyze_performance, get_rsi_thresholds, get_check_interval,
@@ -502,8 +502,11 @@ def main():
                     pos_s = ("▲ABV" if price > ema_v else "▼BLW") if ema_v is not None else "EMA:n/a"
                     macd_h = d.get("macd_hist")
                     sk = d.get("stoch_k"); sd = d.get("stoch_d")
-                    sig = check_signal(price, rsi_v, ema_v, macd_h, sk, sd)
+                    vol_pct = d.get("volume_pct")
+                    sig = check_signal(price, rsi_v, ema_v, macd_h, sk, sd, volume_pct=vol_pct)
 
+                    if sig == "LOW_VOLUME":
+                        diag.append(f"{short}[RSI:{rsi_s} LOW_VOL:{vol_pct:.0f}%]" if vol_pct else f"{short}[LOW_VOL]"); continue
                     if sig in ("TREND_BLOCK_BUY","TREND_BLOCK_SELL"):
                         n_rsi_pass += 1; diag.append(f"{short}[RSI:{rsi_s}✓ {pos_s}✗]"); continue
                     elif sig not in ("BUY","SELL"):
@@ -568,9 +571,10 @@ def main():
 
                         sl_min_dist = price * config.STOP_LOSS_PCT / 100
                         tp_min_dist = price * config.TAKE_PROFIT_PCT / 100
-                        if atr:
-                            sl_dist = max(config.STOP_LOSS_PCT * atr, sl_min_dist)
-                            tp_dist = max(config.TAKE_PROFIT_PCT * atr, tp_min_dist)
+                        atr_levels = calculate_atr_levels(price, atr)
+                        if True:  # always use ATR levels (falls back to config if atr=None)
+                            sl_dist = abs(price - atr_levels["sl"])
+                            tp_dist = abs(atr_levels["tp"] - price)
                         else:
                             sl_dist = sl_min_dist; tp_dist = tp_min_dist
 
