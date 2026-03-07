@@ -380,17 +380,6 @@ def _poll_loop():
                 args = parts[1:]
                 if "@" in word:
                     word = word.split("@")[0]
-
-                # /restart -- special: reply first then exit
-                if word == "/restart":
-                    try:
-                        asyncio.run(_reply(msg.chat_id, _cmd_restart()))
-                    except Exception:
-                        pass
-                    import sys, time
-                    time.sleep(1)
-                    os.execv(sys.executable, [sys.executable] + sys.argv)
-
                 # Admin commands need sender_id
                 if word == "/addadmin":
                     reply_text = _cmd_addadmin(args, msg.chat_id)
