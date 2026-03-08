@@ -20,8 +20,8 @@ SYMBOLS = [
 RSI_BUY_MAX  = 38
 RSI_SELL_MIN = 62
 
-STOP_LOSS_PCT   = 1.5
-TAKE_PROFIT_PCT = 3.0
+STOP_LOSS_PCT   = 2.5
+TAKE_PROFIT_PCT = 5.0  # fallback only — trailing stop handles exits
 
 MTF_NORMAL_CONFIRM     = 2
 MTF_CAUTIOUS_CONFIRM   = 3
@@ -34,7 +34,8 @@ DEFENSIVE_CHECK_INTERVAL = 60
 
 CONSECUTIVE_SL_LIMIT = 3
 
-EVAL_DELAY       = 3600
+EVAL_DELAY       = 7200  # 120 minutes
+TRAILING_STOP_PCT = 2.0   # 2% from peak price  # 120 minutes
 COOLDOWN_MINUTES = 30
 
 DAILY_MAX_TRADES = 50
