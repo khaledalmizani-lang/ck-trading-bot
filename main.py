@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 import config
 import coingecko
 from fetcher import fetch_market_data, fetch_mtf_indicators
-from strategy import check_signal, evaluate_mtf, tf_labels_to_str, calculate_atr_levels
+from strategy import check_signal, evaluate_mtf, tf_labels_to_str, calculate_atr_levels, update_trailing_stop
 import balance as bal
 from journal import log_signal, close_trade, get_pending_trades, load_history
 from analyzer import (
@@ -74,14 +74,21 @@ def monitor_open_trades(prices: dict):
             still_open.append(trade)
             continue
 
+        # Update trailing stop
+        trade = update_trailing_stop(trade, current_price)
+
         exit_reason = None
         sig = trade["signal"]
 
         if sig == "BUY":
-            if current_price <= trade["stop_loss"]:   exit_reason = "STOP_LOSS"
+            if current_price <= trade["stop_loss"]:
+                in_profit = current_price > trade["entry_price"]
+                exit_reason = "TRAILING_STOP" if in_profit else "STOP_LOSS"
             elif current_price >= trade["take_profit"]: exit_reason = "TAKE_PROFIT"
         else:
-            if current_price >= trade["stop_loss"]:   exit_reason = "STOP_LOSS"
+            if current_price >= trade["stop_loss"]:
+                in_profit = current_price < trade["entry_price"]
+                exit_reason = "TRAILING_STOP" if in_profit else "STOP_LOSS"
             elif current_price <= trade["take_profit"]: exit_reason = "TAKE_PROFIT"
 
         if exit_reason is None and now >= trade["due_at"]:
@@ -600,6 +607,7 @@ def main():
                             "entry_id": trade_info["id"], "symbol": best_sym,
                             "signal": best_signal, "entry_price": price,
                             "stop_loss": sl, "take_profit": tp,
+                            "peak_price": price,
                             "due_at": time.time() + config.EVAL_DELAY,
                             "position_size": pos_size,
                         })
