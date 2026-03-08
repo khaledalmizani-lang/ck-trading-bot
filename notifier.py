@@ -60,7 +60,7 @@ def notify_trade_opened(signal, price, sl, tp, trade_id, symbol="BTC/USDT",
                         tf_labels=None, rsi=None, ema_above=None,
                         volume_pct=None, adx=None, signal_score=None):
     coin     = _short(symbol)
-    header   = "🟢  BUY SIGNAL  •  إشارة شراء" if signal == "BUY" else "🔴  SELL SIGNAL  •  إشارة بيع"
+    header   = "🟢 BUY SIGNAL • Crypto 🪙" if signal == "BUY" else "🔴 SELL SIGNAL • Crypto 🪙"
     if signal == "BUY":
         risk, reward = abs(price - sl), abs(tp - price)
         pct_tp = ((tp - price) / price * 100)
@@ -194,7 +194,7 @@ def notify_market_summary(market_data: dict, btc_dominance: float | None,
 
     text = (
         f"╔══════════════════════╗\n"
-        f"🌍  Market Summary  •  ملخص السوق\n"
+        f"🪙 Crypto Market Summary\n"
         f"       {_ast_date()}\n"
         f"╚══════════════════════╝\n\n"
         f"₿ BTC    <b>{_fmt_price(btc_price)}</b>    Dom {dom_str}\n"
