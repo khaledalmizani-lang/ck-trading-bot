@@ -145,3 +145,28 @@ def evaluate_mtf(price, tf_data, direction):
 
 def tf_labels_to_str(tf_labels):
     return " | ".join(f"{tf} {lbl}" for tf, lbl in tf_labels.items())
+
+
+def update_trailing_stop(trade: dict, current_price: float) -> dict:
+    """Update trailing stop loss based on current price."""
+    import config
+    direction  = trade["signal"]
+    trail_pct  = config.TRAILING_STOP_PCT / 100
+    peak       = trade.get("peak_price", trade["entry_price"])
+
+    if direction == "BUY":
+        if current_price > peak:
+            trade["peak_price"] = current_price
+            peak = current_price
+        new_sl = round(peak * (1 - trail_pct), 6)
+        if new_sl > trade["stop_loss"]:
+            trade["stop_loss"] = new_sl
+    elif direction == "SELL":
+        if current_price < peak:
+            trade["peak_price"] = current_price
+            peak = current_price
+        new_sl = round(peak * (1 + trail_pct), 6)
+        if new_sl < trade["stop_loss"]:
+            trade["stop_loss"] = new_sl
+
+    return trade
